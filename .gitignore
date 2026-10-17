@@ -1,0 +1,12 @@
+# Python virtual environment
+.venv/
+
+# dbt artifacts
+target/
+dbt_packages/
+logs/
+
+# Local secrets and OS files
+.env
+.DS_Store
+dbt_internal_packages/
