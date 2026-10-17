@@ -1,0 +1,25 @@
+sources:
+  - name: confido
+    description: >
+      Raw Confido application tables. Invoices and invoice items are synced from
+      external accounting systems and reference entities by their remote
+      (accounting system) IDs.
+    database: confido_demo
+    schema: public
+    tables:
+      - name: invoices
+        description: One row per invoice synced from an accounting system.
+      - name: invoice_items
+        description: One row per invoice line item.
+      - name: items
+        description: Accounting system items (products and non-product charges) by remote ID.
+      - name: contacts
+        description: Accounting system customers by remote ID, with optional mapping to a global customer.
+      - name: global_customers
+        description: Confido's internal customer entities, shared across companies.
+      - name: confido_distribution_centers
+        description: Confido's internal distribution centers, each belonging to a global customer.
+      - name: products
+        description: Confido's internal products, optionally linked to an accounting system item.
+      - name: company_details
+        description: One row per Confido customer company (tenant).

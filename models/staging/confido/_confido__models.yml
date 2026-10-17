@@ -1,0 +1,157 @@
+models:
+  - name: stg_confido__invoices
+    description: One row per invoice synced from an accounting system.
+    columns:
+      - name: invoice_id
+        description: Primary key.
+        data_tests:
+          - unique
+          - not_null
+      - name: invoice_number
+        description: Invoice number from the accounting system. Not guaranteed unique.
+      - name: customer_remote_id
+        description: Accounting system customer ID. Joins to stg_confido__contacts.contact_remote_id.
+        data_tests:
+          - not_null
+      - name: company_detail_id
+        description: The Confido company (tenant) the invoice belongs to.
+        data_tests:
+          - not_null
+      - name: currency_code
+        description: ISO currency code. Null for some invoices.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['USD', 'CAD']
+              config:
+              # warn because it would be newsworthy to see a new currency but should not block the pipeline
+                severity: warn
+      - name: paid_on_date
+        description: Date the invoice was paid.
+
+  - name: stg_confido__invoice_items
+    description: One row per invoice line item.
+    columns:
+      - name: invoice_item_id
+        description: Primary key.
+        data_tests:
+          - unique
+          - not_null
+      - name: invoice_id
+        description: The invoice this line belongs to.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_confido__invoices')
+                field: invoice_id
+      - name: item_remote_id
+        description: Accounting system item ID. Joins to stg_confido__items.item_remote_id.
+        data_tests:
+          - not_null
+      - name: amount
+        description: Line amount in the invoice's currency, rounded to cents. Negative for deductions.
+        data_tests:
+          - not_null
+
+  - name: stg_confido__items
+    description: Accounting system items, including non-product charges such as discounts and services.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['company_detail_id', 'item_remote_id']
+    columns:
+      - name: item_id
+        description: Primary key.
+        data_tests:
+          - unique
+          - not_null
+      - name: item_remote_id
+        description: Accounting system item ID.
+        data_tests:
+          - not_null
+
+  - name: stg_confido__contacts
+    description: Accounting system customers, with an optional mapping to a Confido global customer.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['company_detail_id', 'contact_remote_id']
+    columns:
+      - name: contact_id
+        description: Primary key.
+        data_tests:
+          - unique
+          - not_null
+      - name: contact_remote_id
+        description: Accounting system customer ID.
+        data_tests:
+          - not_null
+      - name: parent_contact_remote_id
+        description: Remote ID of the parent contact, if any.
+      - name: global_customer_id
+        description: Mapped Confido global customer. Null when unmapped.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_confido__global_customers')
+                field: global_customer_id
+              config:
+                severity: warn
+      - name: distribution_center_id
+        description: Mapped Confido distribution center. Null on every row in the current data.
+
+  - name: stg_confido__global_customers
+    description: Confido's internal customer entities. company_detail_id is null for customers shared across companies.
+    columns:
+      - name: global_customer_id
+        description: Primary key.
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_confido__distribution_centers
+    description: Confido's internal distribution centers. Each global customer has one catch-all named "All Other DCs".
+    columns:
+      - name: distribution_center_id
+        description: Primary key.
+        data_tests:
+          - unique
+          - not_null
+      - name: global_customer_id
+        description: The global customer this distribution center belongs to.
+        data_tests:
+          - not_null
+
+  - name: stg_confido__products
+    description: Confido's internal products. A product links to at most one accounting system item, but an item can link to several products.
+    columns:
+      - name: product_id
+        description: Primary key.
+        data_tests:
+          - unique
+          - not_null
+      - name: product_type
+        description: CaseV2 (case), ShipperProduct (mixed shipper), or null (unit or multipack).
+      - name: item_id
+        description: Linked accounting system item. Null for most products.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_confido__items')
+                field: item_id
+              config:
+                severity: warn
+      - name: product_updated_at
+        description: When the product record was last changed in the Confido application (source column updated_at). UTC, no time zone.
+      - name: _synced_at
+        description: When the row was last loaded into the warehouse by the sync (source column _updated_at). Present on every staging model. UTC, no time zone.
+
+  - name: stg_confido__company_details
+    description: One row per Confido customer company (tenant).
+    columns:
+      - name: company_detail_id
+        description: Primary key.
+        data_tests:
+          - unique
+          - not_null
