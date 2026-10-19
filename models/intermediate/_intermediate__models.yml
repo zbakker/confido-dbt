@@ -1,0 +1,63 @@
+models:
+  - name: int_items_mapped_to_products
+    description: >
+      One row per accounting system item, with its Confido product when exactly
+      one product links to the item. Items linked to several products are left
+      unmapped (ambiguous_item) rather than guessed.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['company_detail_id', 'item_remote_id']
+    columns:
+      - name: item_id
+        data_tests:
+          - unique
+          - not_null
+      - name: linked_product_count
+        description: Number of products linked to the item.
+      - name: product_id
+        description: Confido product, set only when exactly one product links to the item.
+      - name: product_name
+        description: Name of the mapped product. Null when product_id is null.
+      - name: product_mapping_status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['mapped', 'ambiguous_item', 'no_linked_product']
+
+  - name: int_contacts_mapped_to_global_customers
+    description: >
+      One row per accounting system contact, with its Confido global customer.
+      Falls back to the parent contact's global customer (one level up) when
+      the contact itself is unmapped.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['company_detail_id', 'contact_remote_id']
+    columns:
+      - name: contact_id
+        data_tests:
+          - unique
+          - not_null
+      - name: global_customer_name
+        description: Name of the resolved global customer.
+      - name: global_customer_mapping_status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['direct', 'via_parent', 'unmapped_contact']
+
+  - name: int_invoice_items_enriched
+    description: >
+      One row per invoice line item with remote IDs resolved to Confido
+      products, global customers and distribution centers, plus names and
+      debugging columns (item, contact, quantity, unit price) that the fact
+      doesn't publish. The fan-out and reconciliation tests live on
+      fct_invoice_items.
+    columns:
+      - name: invoice_item_id
+        data_tests:
+          - unique
+          - not_null
