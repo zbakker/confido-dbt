@@ -1,0 +1,23 @@
+models:
+  - name: int_contacts_mapped_to_global_customers
+    description: >
+      One row per accounting system contact, with its Confido global customer.
+      Falls back to the parent contact's global customer (one level up) when
+      the contact itself is unmapped.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['company_detail_id', 'contact_remote_id']
+    columns:
+      - name: contact_id
+        data_tests:
+          - unique
+          - not_null
+      - name: global_customer_name
+        description: Name of the resolved global customer.
+      - name: global_customer_mapping_status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['direct', 'via_parent', 'unmapped_contact']

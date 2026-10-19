@@ -8,25 +8,13 @@ invoice_items as (
 
 invoices as (
 
-    select * from {{ ref('stg_confido__invoices') }}
-
-),
-
-distribution_centers as (
-
-    select * from {{ ref('stg_confido__distribution_centers') }}
+    select * from {{ ref('int_invoices_enriched') }}
 
 ),
 
 item_mapping as (
 
     select * from {{ ref('int_items_mapped_to_products') }}
-
-),
-
-contact_mapping as (
-
-    select * from {{ ref('int_contacts_mapped_to_global_customers') }}
 
 ),
 
@@ -45,32 +33,30 @@ joined as (
             else item_mapping.product_mapping_status
         end as product_mapping_status,
 
-        contact_mapping.global_customer_id,
-        contact_mapping.global_customer_name,
-        case
-            when contact_mapping.contact_id is null then 'unknown_contact'
-            else contact_mapping.global_customer_mapping_status
-        end as global_customer_mapping_status,
+        invoices.global_customer_id,
+        invoices.global_customer_name,
+        invoices.global_customer_mapping_status,
 
-        -- the contact is the only link to one specific DC (null on every contact
-        -- in current data); a global customer has many DCs, so it can't pick one
-        contact_mapping.distribution_center_id,
-        distribution_centers.distribution_center_name,
+        invoices.distribution_center_id,
+        invoices.distribution_center_name,
 
         invoice_items.item_remote_id,
         item_mapping.item_id,
         item_mapping.item_name,
         invoices.customer_remote_id,
-        contact_mapping.contact_id,
-        contact_mapping.contact_name,
+        invoices.contact_id,
+        invoices.contact_name,
 
         invoice_items.quantity,
         invoice_items.unit_price,
         invoice_items.amount,
+        -- assumes negative lines are deductions (e.g. EDLP, spoils, early pay discount)
+        invoice_items.amount < 0 as is_deduction,
         invoices.currency_code,
 
         invoices.paid_on_date,
-        invoices.created_at as invoice_created_at
+        invoices.is_paid,
+        invoices.invoice_created_at
 
     from invoice_items
     left join invoices
@@ -78,11 +64,6 @@ joined as (
     left join item_mapping
         on invoices.company_detail_id = item_mapping.company_detail_id
         and invoice_items.item_remote_id = item_mapping.item_remote_id
-    left join contact_mapping
-        on invoices.company_detail_id = contact_mapping.company_detail_id
-        and invoices.customer_remote_id = contact_mapping.contact_remote_id
-    left join distribution_centers
-        on contact_mapping.distribution_center_id = distribution_centers.distribution_center_id
 
 )
 

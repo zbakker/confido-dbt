@@ -1,0 +1,21 @@
+models:
+  - name: int_invoice_items_enriched
+    description: >
+      One row per invoice line item with remote IDs resolved to Confido
+      products, global customers and distribution centers, plus names and
+      debugging columns (item, contact, quantity, unit price) that the fact
+      doesn't publish. Includes paid and unpaid invoices; must reconcile to
+      stg_confido__invoice_items line by line (no lines dropped or duplicated).
+    data_tests:
+      - dbt_utils.equal_rowcount:
+          arguments:
+            compare_model: ref('stg_confido__invoice_items')
+      - dbt_utils.equality:
+          arguments:
+            compare_model: ref('stg_confido__invoice_items')
+            compare_columns: ['invoice_item_id', 'amount']
+    columns:
+      - name: invoice_item_id
+        data_tests:
+          - unique
+          - not_null

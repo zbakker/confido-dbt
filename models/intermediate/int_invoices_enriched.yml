@@ -1,0 +1,41 @@
+models:
+  - name: int_invoices_enriched
+    description: >
+      One row per invoice, including invoices with no line items. Carries the
+      invoice-level fields (customer mapping, distribution center, payment
+      status) and line totals split by sign: gross (positive lines),
+      deductions (negative lines) and net. Source of invoice fields for
+      int_invoice_items_enriched.
+    data_tests:
+      - dbt_utils.equal_rowcount:
+          arguments:
+            compare_model: ref('stg_confido__invoices')
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "net_amount = gross_amount + deduction_amount"
+    columns:
+      - name: invoice_id
+        data_tests:
+          - unique
+          - not_null
+      - name: company_detail_id
+        data_tests:
+          - not_null
+      - name: global_customer_mapping_status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['direct', 'via_parent', 'unmapped_contact', 'unknown_contact']
+      - name: line_count
+        description: Number of line items on the invoice. 0 for invoices with no lines.
+      - name: gross_amount
+        description: Sum of positive line amounts.
+      - name: deduction_amount
+        description: Sum of negative line amounts (zero or negative). Assumes negative lines are deductions.
+      - name: net_amount
+        description: Sum of all line amounts (gross_amount + deduction_amount).
+      - name: is_paid
+        description: True when the invoice has a paid_on_date.
+        data_tests:
+          - not_null

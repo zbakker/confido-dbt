@@ -25,18 +25,23 @@ final as (
         distribution_center_id,
         distribution_center_name,
 
+        item_id,
         item_remote_id,
         item_name,
         customer_remote_id,
+        contact_id,
         contact_name,
 
         amount,
+        is_deduction,
         currency_code,
 
         paid_on_date,
+        is_paid,
         invoice_created_at
 
     from invoice_items
+    where is_paid
 
 )
 

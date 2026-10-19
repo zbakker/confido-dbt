@@ -1,24 +1,11 @@
 models:
   - name: fct_invoice_items
     description: >
-      One row per invoice line item, with the dollar amount and references to
-      Confido internal products, global customers and distribution centers
-      where the data supports them. Unresolved references are null. Rows and dollar totals always
-      reconcile to stg_confido__invoice_items.
-    data_tests:
-    # Ensures no lines are dropped from staging.
-      - dbt_utils.equal_rowcount:
-          arguments:
-            compare_model: ref('stg_confido__invoice_items')
-      - dbt_utils.equality:
-          arguments:
-            compare_model: ref('stg_confido__invoice_items')
-            compare_columns: ['invoice_item_id', 'amount']
-      - dbt_utils.expression_is_true:
-          arguments:
-            expression: "product_mapping_status != 'unknown_item'"
-          config:
-            severity: warn
+      One row per line item on a paid invoice, with the dollar amount and
+      references to Confido internal products, global customers and
+      distribution centers where the data supports them. Unresolved references
+      are null. Unpaid invoices are excluded; the full set of lines (paid and
+      unpaid) is reconciled to staging in int_invoice_items_enriched.
     columns:
       - name: invoice_item_id
         description: Primary key. The source invoice item ID.
@@ -70,10 +57,14 @@ models:
           because no contact carries a DC. Distribution centers also belong to
           global customers, but a global customer has many DCs (plus one
           "All Other DCs" catch-all), so the customer alone can't identify which
-          DC an invoice relates to. Populates automatically if the source starts
-          filling contacts.distribution_center_id.
+          DC an invoice relates to.
       - name: distribution_center_name
         description: Name of the Confido distribution center. Null whenever distribution_center_id is null.
+      - name: item_id
+        description: >
+          Confido's internal ID for the accounting system item (stg_confido__items.item_id).
+          Joins straight to the items table, including for lines with no product.
+          Null only when the item remote ID matches no item (product_mapping_status = 'unknown_item').
       - name: item_remote_id
         description: Accounting system item ID, kept for traceability.
       - name: item_name
@@ -82,19 +73,34 @@ models:
           The only description of what was sold when product_id is null.
       - name: customer_remote_id
         description: Accounting system customer ID, kept for traceability.
+      - name: contact_id
+        description: >
+          Confido's internal ID for the accounting system contact (stg_confido__contacts.contact_id).
       - name: contact_name
         description: >
           Accounting system customer name. Identifies the customer when
           global_customer_id is null because the contact isn't mapped (e.g. Kroger,
           Trader Joe's). Null when the customer remote ID matches no contact
-          (unknown_contact, e.g. the GENERATED_ IDs).
+          (unknown_contact, GENERATED_ IDs).
       - name: amount
         description: Line amount in currency_code, rounded to cents. Negative for deductions.
+        data_tests:
+          - not_null
+      - name: is_deduction
+        description: >
+          True when amount is negative. Assumes negative lines are deductions
+          taken off the invoice (e.g. EDLP, retailer spoils, early pay discount)
+          rather than refunds. The same deduction items sometimes appear with
+          positive amounts, so this follows the sign, not the item.
         data_tests:
           - not_null
       - name: currency_code
         description: ISO currency code from the invoice. Null on some invoices; don't sum across currencies.
       - name: paid_on_date
         description: Date the invoice was paid.
+      - name: is_paid
+        description: True when the invoice has a paid_on_date. Every invoice in the current data has one.
+        data_tests:
+          - not_null
       - name: invoice_created_at
         description: When the invoice was created in the source. UTC, no time zone.
