@@ -23,6 +23,9 @@ models:
     staging:
       +materialized: view
     intermediate:
+      # Built in the target schema for this exercise. In a shared environment these
+      # would go to a separate, restricted schema (+schema: intermediate) so only
+      # marts are exposed to end users.
       +materialized: view
     marts:
       +materialized: table

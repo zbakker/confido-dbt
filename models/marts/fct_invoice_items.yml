@@ -1,0 +1,100 @@
+models:
+  - name: fct_invoice_items
+    description: >
+      One row per invoice line item, with the dollar amount and references to
+      Confido internal products, global customers and distribution centers
+      where the data supports them. Unresolved references are null. Rows and dollar totals always
+      reconcile to stg_confido__invoice_items.
+    data_tests:
+    # Ensures no lines are dropped from staging.
+      - dbt_utils.equal_rowcount:
+          arguments:
+            compare_model: ref('stg_confido__invoice_items')
+      - dbt_utils.equality:
+          arguments:
+            compare_model: ref('stg_confido__invoice_items')
+            compare_columns: ['invoice_item_id', 'amount']
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "product_mapping_status != 'unknown_item'"
+          config:
+            severity: warn
+    columns:
+      - name: invoice_item_id
+        description: Primary key. The source invoice item ID.
+        data_tests:
+          - unique
+          - not_null
+      - name: invoice_id
+        description: The invoice the line belongs to.
+        data_tests:
+          - not_null
+      - name: invoice_number
+        description: Invoice number from the accounting system. Not guaranteed unique.
+      - name: company_detail_id
+        description: The Confido company (tenant) the invoice belongs to.
+        data_tests:
+          - not_null
+      - name: product_id
+        description: Confido product. Set only when the line's item links to exactly one product.
+      - name: product_name
+        description: Name of the Confido product. Null whenever product_id is null.
+      - name: product_mapping_status
+        description: >
+          mapped; ambiguous_item (the item links to several products);
+          no_linked_product (e.g. services, discounts, trade spend);
+          unknown_item (the item remote ID matches no item).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['mapped', 'ambiguous_item', 'no_linked_product', 'unknown_item']
+      - name: global_customer_id
+        description: Confido global customer, from the invoice's contact or that contact's parent.
+      - name: global_customer_name
+        description: Name of the Confido global customer. Null whenever global_customer_id is null.
+      - name: global_customer_mapping_status
+        description: >
+          direct; via_parent (inherited from the parent contact);
+          unmapped_contact (the contact exists but has no global customer);
+          unknown_contact (the customer remote ID matches no contact).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['direct', 'via_parent', 'unmapped_contact', 'unknown_contact']
+      - name: distribution_center_id
+        description: >
+          Confido distribution center from the invoice's contact
+          (contacts.distribution_center_id). Null on every row in current data,
+          because no contact carries a DC. Distribution centers also belong to
+          global customers, but a global customer has many DCs (plus one
+          "All Other DCs" catch-all), so the customer alone can't identify which
+          DC an invoice relates to. Populates automatically if the source starts
+          filling contacts.distribution_center_id.
+      - name: distribution_center_name
+        description: Name of the Confido distribution center. Null whenever distribution_center_id is null.
+      - name: item_remote_id
+        description: Accounting system item ID, kept for traceability.
+      - name: item_name
+        description: >
+          Accounting system item name (e.g. "Yogurt", "Services", "Early Pay 2% Discount").
+          The only description of what was sold when product_id is null.
+      - name: customer_remote_id
+        description: Accounting system customer ID, kept for traceability.
+      - name: contact_name
+        description: >
+          Accounting system customer name. Identifies the customer when
+          global_customer_id is null because the contact isn't mapped (e.g. Kroger,
+          Trader Joe's). Null when the customer remote ID matches no contact
+          (unknown_contact, e.g. the GENERATED_ IDs).
+      - name: amount
+        description: Line amount in currency_code, rounded to cents. Negative for deductions.
+        data_tests:
+          - not_null
+      - name: currency_code
+        description: ISO currency code from the invoice. Null on some invoices; don't sum across currencies.
+      - name: paid_on_date
+        description: Date the invoice was paid.
+      - name: invoice_created_at
+        description: When the invoice was created in the source. UTC, no time zone.
