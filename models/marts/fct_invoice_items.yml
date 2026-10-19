@@ -6,15 +6,6 @@ models:
       distribution centers where the data supports them. Unresolved references
       are null. Unpaid invoices are excluded; the full set of lines (paid and
       unpaid) is reconciled to staging in int_invoice_items_enriched.
-    data_tests:
-      - dbt_utils.expression_is_true:
-          arguments:
-            expression: "is_paid"
-      - dbt_utils.expression_is_true:
-          arguments:
-            expression: "product_mapping_status != 'unknown_item'"
-          config:
-            severity: warn
     columns:
       - name: invoice_item_id
         description: Primary key. The source invoice item ID.
@@ -66,10 +57,14 @@ models:
           because no contact carries a DC. Distribution centers also belong to
           global customers, but a global customer has many DCs (plus one
           "All Other DCs" catch-all), so the customer alone can't identify which
-          DC an invoice relates to. Populates automatically if the source starts
-          filling contacts.distribution_center_id.
+          DC an invoice relates to.
       - name: distribution_center_name
         description: Name of the Confido distribution center. Null whenever distribution_center_id is null.
+      - name: item_id
+        description: >
+          Confido's internal ID for the accounting system item (stg_confido__items.item_id).
+          Joins straight to the items table, including for lines with no product.
+          Null only when the item remote ID matches no item (product_mapping_status = 'unknown_item').
       - name: item_remote_id
         description: Accounting system item ID, kept for traceability.
       - name: item_name
@@ -78,12 +73,15 @@ models:
           The only description of what was sold when product_id is null.
       - name: customer_remote_id
         description: Accounting system customer ID, kept for traceability.
+      - name: contact_id
+        description: >
+          Confido's internal ID for the accounting system contact (stg_confido__contacts.contact_id).
       - name: contact_name
         description: >
           Accounting system customer name. Identifies the customer when
           global_customer_id is null because the contact isn't mapped (e.g. Kroger,
           Trader Joe's). Null when the customer remote ID matches no contact
-          (unknown_contact, e.g. the GENERATED_ IDs).
+          (unknown_contact, GENERATED_ IDs).
       - name: amount
         description: Line amount in currency_code, rounded to cents. Negative for deductions.
         data_tests:

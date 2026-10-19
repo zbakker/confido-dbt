@@ -125,5 +125,6 @@ erDiagram
 - Consider PIT measures. We only have current state and clearly things change given the PREVENT_CUSTOMER_REMAPPING field. Could be used for mapping correct products if only one version of item_remote_id exists at a time.
 - Build staging models for those sources not used in invoice items model.
 - Build intermediate models into a separate, restricted schema.
+- Currency conversion to USD for foreign currency to speak in similar language on aggregate level.
 - Add an `int_invoices` model once invoice-level logic exists (de-duplication, batch classification).
 - Add CI running `dbt build`, source freshness checks, and currency conversion.

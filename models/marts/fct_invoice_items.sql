@@ -25,9 +25,11 @@ final as (
         distribution_center_id,
         distribution_center_name,
 
+        item_id,
         item_remote_id,
         item_name,
         customer_remote_id,
+        contact_id,
         contact_name,
 
         amount,
