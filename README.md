@@ -15,7 +15,7 @@ dbt build --select +fct_invoice_items
 ```
 
 # The model
-`fct_invoice_items`: one row per invoice line item (2,527 lines, $8.33M), with the line amount and references to Confido internal entities where the data supports them.
+`fct_invoice_items`: one row per line item on a **paid** invoice, with the line amount and references to Confido internal entities where the data supports them.
 
 | Reference | Columns | Lines mapped |
 |---|---|---|
@@ -25,8 +25,8 @@ dbt build --select +fct_invoice_items
 
 - **Unmapped references are null.** The `*_mapping_status` columns say why, e.g. `ambiguous_item` or `unmapped_contact`.
 - **Source names are kept for traceability:** the accounting system's item and customer IDs and names (`item_remote_id`, `item_name`, `customer_remote_id`, `contact_name`). Unmapped lines are still readable.
-- **The fact table reconciles to the source line by line.** Tests check `unique` on `invoice_item_id`, `dbt_utils.equal_rowcount`, and `dbt_utils.equality` on (`invoice_item_id`, `amount`) against staging.
-- **Mapping tables created for debugging** Logic could be handled in invoice items model but is separated to faster identify when something changes.
+- **Lines reconcile to the source line by line** in `int_invoice_items_enriched` (paid and unpaid): `unique` on `invoice_item_id`, `dbt_utils.equal_rowcount`, and `dbt_utils.equality` on (`invoice_item_id`, `amount`) against staging. The fact table then keeps only paid invoices (`paid_on_date` is set).
+- **Mapping tables created for debugging** Logic could be handled in invoice items or invoice model but is separated to faster identify when something changes.
 
 ## Layers
 - **`staging/`:** one model per source table from `CONFIDO_DEMO.PUBLIC`. Rename, cast and light cleanup only.
@@ -102,12 +102,14 @@ erDiagram
 - **Currency is passed through as-is.** Amounts aren't converted, and null currency isn't assumed to be USD.
 - **Coverage** It's better to have coverage even if it may change later. i.e. a duplicate product id is added so a previously covered item no longer has an assigned product.
 - **Sync fields** Assume that _updated_at fields that look like sync timing is that rather than something else.
+- **Negative lines are deductions** (`is_deduction`), e.g. EDLP, retailer spoils, early pay discount, not refunds. No invoice nets negative and no refund or credit memo records were found. The same deduction items sometimes appear with positive amounts, so the flag follows the sign rather than the item.
+- **Timestamps** that are currently only dates are better as dates for joining and won't be replaced by timestamps.
 
 # Key decisions
 - **Ambiguous items stay unmapped rather than guessed.** "Yogurt" links to 5 products and "Ice cream" to 2. A plain join would duplicate lines (2,527 → 5,853) and inflate the total to $13.20M. Picking the most recently updated product, or matching on unit price, didn't hold up in the data.
 - **No guessed customer mappings.** Contacts without a global customer (e.g. Kroger, Trader Joe's) stay unmapped. Names aren't a reliable key: there are two "Kroger" global customers, and existing mappings don't always follow names.
 - **No catch-all distribution center.** Every global customer has an "All Other DCs" record, but using it would only restate the customer. The DC comes only from the contact, which is empty in the current data.
-- **Every line is kept.** Nothing is filtered out, so totals match the accounting data. Data-quality concerns are documented below rather than encoded as flags.
+- **Only paid invoices are published.** That's the one filter; everything else, including unmapped lines, is kept, so totals match the accounting data for paid invoices. Data-quality concerns are documented below rather than encoded as flags.
 - **Scope:** one fact table, no dimension models. Quantity and unit price aren't published. Five source tables that aren't on the invoice path aren't staged.
 
 
@@ -120,6 +122,7 @@ erDiagram
 6. **Is there a reliable test-data flag?** GEN_xx invoices and other names with test in them could be.
 
 # Next steps
+- Consider PIT measures. We only have current state and clearly things change given the PREVENT_CUSTOMER_REMAPPING field. Could be used for mapping correct products if only one version of item_remote_id exists at a time.
 - Build staging models for those sources not used in invoice items model.
 - Build intermediate models into a separate, restricted schema.
 - Add an `int_invoices` model once invoice-level logic exists (de-duplication, batch classification).

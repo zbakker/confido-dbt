@@ -1,19 +1,15 @@
 models:
   - name: fct_invoice_items
     description: >
-      One row per invoice line item, with the dollar amount and references to
-      Confido internal products, global customers and distribution centers
-      where the data supports them. Unresolved references are null. Rows and dollar totals always
-      reconcile to stg_confido__invoice_items.
+      One row per line item on a paid invoice, with the dollar amount and
+      references to Confido internal products, global customers and
+      distribution centers where the data supports them. Unresolved references
+      are null. Unpaid invoices are excluded; the full set of lines (paid and
+      unpaid) is reconciled to staging in int_invoice_items_enriched.
     data_tests:
-    # Ensures no lines are dropped from staging.
-      - dbt_utils.equal_rowcount:
+      - dbt_utils.expression_is_true:
           arguments:
-            compare_model: ref('stg_confido__invoice_items')
-      - dbt_utils.equality:
-          arguments:
-            compare_model: ref('stg_confido__invoice_items')
-            compare_columns: ['invoice_item_id', 'amount']
+            expression: "is_paid"
       - dbt_utils.expression_is_true:
           arguments:
             expression: "product_mapping_status != 'unknown_item'"
@@ -92,9 +88,21 @@ models:
         description: Line amount in currency_code, rounded to cents. Negative for deductions.
         data_tests:
           - not_null
+      - name: is_deduction
+        description: >
+          True when amount is negative. Assumes negative lines are deductions
+          taken off the invoice (e.g. EDLP, retailer spoils, early pay discount)
+          rather than refunds. The same deduction items sometimes appear with
+          positive amounts, so this follows the sign, not the item.
+        data_tests:
+          - not_null
       - name: currency_code
         description: ISO currency code from the invoice. Null on some invoices; don't sum across currencies.
       - name: paid_on_date
         description: Date the invoice was paid.
+      - name: is_paid
+        description: True when the invoice has a paid_on_date. Every invoice in the current data has one.
+        data_tests:
+          - not_null
       - name: invoice_created_at
         description: When the invoice was created in the source. UTC, no time zone.

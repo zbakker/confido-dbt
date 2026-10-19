@@ -31,12 +31,15 @@ final as (
         contact_name,
 
         amount,
+        is_deduction,
         currency_code,
 
         paid_on_date,
+        is_paid,
         invoice_created_at
 
     from invoice_items
+    where is_paid
 
 )
 
