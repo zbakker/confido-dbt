@@ -14,7 +14,7 @@ models:
         data_tests:
           - not_null
       - name: company_detail_id
-        description: The Confido company (tenant) the invoice belongs to.
+        description: The company (Confido's customer, the brand) the invoice belongs to.
         data_tests:
           - not_null
       - name: currency_code
@@ -102,7 +102,10 @@ models:
         description: Mapped Confido distribution center. Null on every row in the current data.
 
   - name: stg_confido__global_customers
-    description: Confido's internal customer entities. company_detail_id is null for customers shared across companies.
+    description: >
+      Where companies ship and sell to (retailers, distributors). company_detail_id
+      is null for global customers shared across companies (150 of 156); set when
+      one company created its own. A company can only reference shared ones or its own.
     columns:
       - name: global_customer_id
         description: Primary key.
@@ -122,6 +125,11 @@ models:
         description: The global customer this distribution center belongs to.
         data_tests:
           - not_null
+      - name: company_detail_id
+        description: >
+          The company the distribution center belongs to. Null for
+          DCs shared across companies (1,147 of 1,152). DC joins accept a matching
+          or null company.
 
   - name: stg_confido__products
     description: Confido's internal products. A product links to at most one accounting system item, but an item can link to several products.
@@ -147,8 +155,112 @@ models:
       - name: _synced_at
         description: When the row was last loaded into the warehouse by the sync (source column _updated_at). Present on every staging model. UTC, no time zone.
 
+  - name: stg_confido__product_relationships
+    description: >
+      Parent to child product links. A case holds one unit (e.g. 8 x Strawberry 5oz Cup);
+      a shipper or mixed pack holds several. Children can have children of their own
+      (Mixed fruit pack case -> Mixed fruit pack -> three cups).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['parent_product_id', 'child_product_id']
+    columns:
+      - name: product_relationship_id
+        description: Primary key.
+        data_tests:
+          - unique
+          - not_null
+      - name: parent_product_id
+        description: The containing product (source column product_id).
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_confido__products')
+                field: product_id
+      - name: child_product_id
+        description: The contained product.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_confido__products')
+                field: product_id
+      - name: child_quantity
+        description: How many of the child product one parent contains.
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "> 0"
+
+  - name: stg_confido__product_shipping_configs
+    description: >
+      The product a single or pack ships as (a case in current data). A default row
+      has no global customer or DC; a row with either overrides it for that customer
+      or DC from effective_date. Rows with a forecast_version_id are forecast scenarios.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['product_id', 'global_customer_id', 'distribution_center_id', 'forecast_version_id', 'effective_date']
+    columns:
+      - name: product_id
+        description: The single or pack being shipped.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_confido__products')
+                field: product_id
+      - name: shipping_product_id
+        description: The product it ships as.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_confido__products')
+                field: product_id
+              config:
+                # product 801 ships as 2631, which isn't in products (test data)
+                severity: warn
+      - name: forecast_version_id
+        description: Set on forecast scenario rows. Null on actual configs.
+      - name: effective_date
+        description: First date the config applies (source column effective_at).
+        data_tests:
+          - not_null
+
+  - name: stg_confido__product_prices
+    description: >
+      Product prices (cases and shippers in current data). A default row has no
+      global customer or DC; a row with either overrides it for that customer or DC
+      from effective_date. Rows with a forecast_version_id are forecast scenarios.
+    columns:
+      - name: product_price_id
+        description: Primary key.
+        data_tests:
+          - unique
+          - not_null
+      - name: product_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_confido__products')
+                field: product_id
+      - name: price
+        description: Price per one of the product (source column amount), currency not stated.
+        data_tests:
+          - not_null
+      - name: forecast_version_id
+        description: Set on forecast scenario rows. Null on actual prices.
+      - name: effective_date
+        description: First date the price applies (source column effective_at).
+        data_tests:
+          - not_null
+
   - name: stg_confido__company_details
-    description: One row per Confido customer company (tenant).
+    description: One row per company, i.e. Confido's customer (a CPG brand). Only one in current data, but every model is built for many.
     columns:
       - name: company_detail_id
         description: Primary key.

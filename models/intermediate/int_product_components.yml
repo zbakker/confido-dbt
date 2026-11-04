@@ -1,0 +1,41 @@
+models:
+  - name: int_product_components
+    description: >
+      One row per product per product it contains at any depth, including itself
+      (depth 0), following product_relationships with quantities multiplied per
+      level. A Strawberry Multipack case is 1 case, 8 multipacks and 32 cups.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['product_id', 'component_product_id']
+    columns:
+      - name: product_id
+        description: The product being broken down. Every product appears.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_confido__products')
+                field: product_id
+      - name: component_product_id
+        description: A product contained in product_id, or product_id itself.
+        data_tests:
+          - not_null
+      - name: component_level
+        description: >
+          case (type CaseV2); shipper (type ShipperProduct); pack (no type, has
+          children, e.g. a multipack); single (no type, no children).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['case', 'shipper', 'pack', 'single']
+      - name: component_quantity
+        description: How many of component_product_id one product_id contains.
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "> 0"
+      - name: depth
+        description: Fewest levels between product_id and the component. 0 for the product itself.

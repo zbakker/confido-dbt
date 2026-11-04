@@ -16,10 +16,16 @@ sources:
       - name: contacts
         description: Accounting system customers by remote ID, with optional mapping to a global customer.
       - name: global_customers
-        description: Confido's internal customer entities, shared across companies.
+        description: Where companies ship and sell to (retailers, distributors). Mostly shared across companies; some are specific to one.
       - name: confido_distribution_centers
         description: Confido's internal distribution centers, each belonging to a global customer.
       - name: products
         description: Confido's internal products, optionally linked to an accounting system item.
+      - name: product_relationships
+        description: Parent to child product links with the child quantity (e.g. a case contains 8 units; a shipper contains several units).
+      - name: product_shipping_configs
+        description: The product (usually a case) a single or pack ships as, optionally per global customer or DC, from an effective date.
+      - name: product_prices
+        description: Product prices, optionally per global customer or DC, from an effective date.
       - name: company_details
-        description: One row per Confido customer company (tenant).
+        description: One row per company, i.e. Confido's customer (a CPG brand). Every company-owned table is scoped by company_detail_id.

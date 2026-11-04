@@ -16,13 +16,14 @@ products_per_item as (
 
     select
         item_id,
+        company_detail_id,
         count(*) as linked_product_count,
         min(product_id) as product_id,
         min(product_name) as product_name
 
     from products
     where item_id is not null
-    group by item_id
+    group by item_id, company_detail_id
 
 ),
 
@@ -53,8 +54,10 @@ final as (
         end as product_mapping_status
 
     from items
+    -- an item only maps to its own company's products
     left join products_per_item
         on items.item_id = products_per_item.item_id
+        and items.company_detail_id = products_per_item.company_detail_id
 
 )
 
