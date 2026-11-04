@@ -1,0 +1,26 @@
+models:
+  - name: int_products_packaging
+    description: One row per product with its level and how many packs and singles it contains.
+    columns:
+      - name: product_id
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_confido__products')
+                field: product_id
+      - name: product_level
+        description: case, shipper, pack or single (see int_product_components.component_level).
+        data_tests:
+          - not_null
+      - name: singles_per_product
+        description: Total singles inside the product, across every kind. 1 for a single.
+        data_tests:
+          - not_null
+      - name: single_product_count
+        description: Number of distinct singles inside. More than 1 for shippers and mixed packs.
+      - name: single_product_id
+        description: The single inside, set only when single_product_count = 1.
+      - name: packs_per_product
+        description: Packs inside the product (not counting itself). Null when it holds singles directly.

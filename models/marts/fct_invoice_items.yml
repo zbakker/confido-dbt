@@ -3,7 +3,9 @@ models:
     description: >
       One row per line item on a paid invoice, with the dollar amount and
       references to Confido internal products, global customers and
-      distribution centers where the data supports them. Unresolved references
+      distribution centers where the data supports them. Quantities are converted to
+      cases (Operations), packs and singles (Manufacturing), with a check on
+      whether the line's unit price supports reading its quantity as cases. Unresolved references
       are null. Unpaid invoices are excluded; the full set of lines (paid and
       unpaid) is reconciled to staging in int_invoice_items_enriched.
     columns:
@@ -19,7 +21,18 @@ models:
       - name: invoice_number
         description: Invoice number from the accounting system. Not guaranteed unique.
       - name: company_detail_id
-        description: The Confido company (tenant) the invoice belongs to.
+        description: >
+          The company (Confido's customer, the brand) that issued the invoice. Global
+          customers are shared across companies, so filter or group by company
+          before comparing brands at the same customer.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_confido__company_details')
+                field: company_detail_id
+      - name: company_name
+        description: Name of the company.
         data_tests:
           - not_null
       - name: product_id
@@ -36,6 +49,10 @@ models:
           - accepted_values:
               arguments:
                 values: ['mapped', 'ambiguous_item', 'no_linked_product', 'unknown_item']
+      - name: invoiced_product_level
+        description: >
+          Level of the line's product: case, shipper, pack or single. Every mapped
+          line in current data is a case. Null whenever product_id is null.
       - name: global_customer_id
         description: Confido global customer, from the invoice's contact or that contact's parent.
       - name: global_customer_name
@@ -82,6 +99,72 @@ models:
           global_customer_id is null because the contact isn't mapped (e.g. Kroger,
           Trader Joe's). Null when the customer remote ID matches no contact
           (unknown_contact, GENERATED_ IDs).
+      - name: quantity
+        description: The invoice line quantity as synced from the accounting system, unconverted.
+      - name: quantity_uom
+        description: >
+          What quantity counts: case when the invoiced product is a case or shipper,
+          otherwise the invoiced product's level. Null when the line has no product
+          (unconverted). Checked by quantity_price_check.
+      - name: unit_price
+        description: The invoice line unit price as synced, in currency_code.
+      - name: case_product_id
+        description: >
+          The case the line's quantity converts through: the invoiced product when
+          it's a case or shipper, otherwise the case its shipping config names for
+          this customer, DC and invoice date.
+      - name: case_product_name
+        description: Name of the case product.
+      - name: case_source
+        description: invoiced_product or shipping_config. Null when no case was found.
+      - name: packs_per_case
+        description: Packs in one case (e.g. 8 multipacks). Null when the case holds singles directly.
+      - name: singles_per_case
+        description: Singles in one case through every level (e.g. 8 cups, or 32 cups in a multipack case).
+      - name: single_product_id
+        description: >
+          The single inside the case, for manufacturing. Set only when the case holds
+          one kind; null for shippers and mixed packs (single_quantity is still the total).
+      - name: single_product_name
+        description: Name of the single product.
+      - name: case_quantity
+        description: Line quantity in cases (Operations). Null when the line has no product or no case.
+      - name: pack_quantity
+        description: Line quantity in packs. Null when the case has no pack level.
+      - name: single_quantity
+        description: Line quantity in singles, the individual units (Manufacturing).
+      - name: expected_case_price
+        description: >
+          Price of the case product from product_prices: the most specific price
+          (DC, then global customer, then default) in effect on the invoice date.
+          Forecast scenario prices are ignored.
+      - name: expected_amount
+        description: >
+          What the line should have been billed: case_quantity x expected_case_price.
+          Compare with amount, or sum by invoice_id and compare with the invoice's
+          product lines. For lines billed as singles or packs a gap points at the
+          product_relationships factors; for lines billed as cases (all current data)
+          the rollup isn't used, so a gap means a price difference or a quantity that
+          isn't a case count. Null when case_quantity or expected_case_price is null.
+      - name: implied_case_quantity
+        description: >
+          Cases the line's dollars imply: amount / expected_case_price. Doesn't use the
+          quantity field, so it still gives a case estimate when the quantity is a
+          dollar figure or a lump sum (not_a_case_price). Approximate: assumes the
+          line was billed at the expected price.
+      - name: quantity_price_check
+        description: >
+          Whether the line's unit price looks like a case price, i.e. whether the
+          converted quantities can be trusted. matches_case_price (within 1%);
+          differs_from_case_price (within 2x: a customer price difference, quantity
+          still cases); not_a_case_price (e.g. quantity 1 with the line total as unit
+          price, or the GEN_ batch with unit price 1; don't use the converted
+          quantities); no_case_price (no product or no price to compare).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['matches_case_price', 'differs_from_case_price', 'not_a_case_price', 'no_case_price']
       - name: amount
         description: Line amount in currency_code, rounded to cents. Negative for deductions.
         data_tests:

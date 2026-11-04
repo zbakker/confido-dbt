@@ -1,0 +1,94 @@
+models:
+  - name: fct_invoices
+    description: >
+      One row per paid invoice, with what was billed for its product lines compared
+      with what the rolled-up quantities say should have been billed
+      (case_quantity x expected case price, summed from fct_invoice_items'
+      expected_amount). Same population as fct_invoice_items. For lines billed as
+      singles or packs a gap points at the product_relationships factors; for lines
+      billed as cases (all current mapped lines) it points at a price difference or a
+      quantity that isn't a case count.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "checked_line_count <= product_line_count and product_line_count <= line_count"
+    columns:
+      - name: invoice_id
+        description: Primary key. The source invoice ID.
+        data_tests:
+          - unique
+          - not_null
+      - name: invoice_number
+        description: Invoice number from the accounting system. Not guaranteed unique.
+      - name: company_detail_id
+        description: The company (Confido's customer, the brand) that issued the invoice.
+        data_tests:
+          - not_null
+      - name: company_name
+        description: Name of the company.
+      - name: global_customer_id
+        description: Confido global customer, from the invoice's contact or that contact's parent.
+      - name: global_customer_name
+        description: Name of the Confido global customer.
+      - name: global_customer_mapping_status
+        description: direct, via_parent, unmapped_contact or unknown_contact.
+      - name: distribution_center_id
+        description: Confido distribution center from the invoice's contact. Null in current data.
+      - name: distribution_center_name
+        description: Name of the distribution center.
+      - name: customer_remote_id
+        description: Accounting system customer ID, kept for traceability.
+      - name: contact_id
+        description: Confido's internal ID for the accounting system contact.
+      - name: contact_name
+        description: Accounting system customer name.
+      - name: line_count
+        description: Number of line items on the invoice.
+      - name: gross_amount
+        description: Sum of positive line amounts.
+      - name: deduction_amount
+        description: Sum of negative line amounts (deductions such as EDLP or spoils).
+      - name: net_amount
+        description: Sum of all line amounts. Matches the invoice's lines in fct_invoice_items.
+      - name: currency_code
+        description: ISO currency code. Null on some invoices; don't sum across currencies.
+      - name: product_line_count
+        description: Lines that map to a Confido product.
+      - name: product_amount
+        description: Billed amount on lines that map to a product.
+      - name: checked_line_count
+        description: >
+          Lines with an expected amount (a product, a case and a case price in effect
+          on the invoice date). The billed vs expected comparison uses only these.
+      - name: checked_billed_amount
+        description: Billed amount on the checked lines.
+      - name: checked_expected_amount
+        description: Sum of expected_amount on the checked lines.
+      - name: amount_variance
+        description: >
+          checked_billed_amount - checked_expected_amount. Positive means billed more
+          than the case prices imply. Large when a line's quantity isn't a case count
+          (see not_a_case_price_line_count).
+      - name: not_a_case_price_line_count
+        description: >
+          Checked lines whose unit price isn't within 2x of the case price, so their
+          quantity is likely a dollar figure or lump sum and their expected amount is
+          not meaningful.
+      - name: invoice_amount_check
+        description: >
+          matches_expected (checked lines within 1% of expected); differs_from_expected
+          (e.g. a customer price or an outdated price list); has_non_case_quantity (at
+          least one not_a_case_price line, so the expected total can't be trusted);
+          no_checkable_lines (no product lines with a case price, e.g. only services or
+          ambiguous items).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['matches_expected', 'differs_from_expected', 'has_non_case_quantity', 'no_checkable_lines']
+      - name: paid_on_date
+        description: Date the invoice was paid.
+      - name: is_paid
+        description: True for every row; unpaid invoices are excluded.
+      - name: invoice_created_at
+        description: When the invoice was created in the source. UTC, no time zone.

@@ -6,42 +6,72 @@ invoice_items as (
 
 ),
 
+quantities as (
+
+    select * from {{ ref('int_invoice_items_quantities') }}
+
+),
+
 final as (
 
     select
-        invoice_item_id,
-        invoice_id,
-        invoice_number,
-        company_detail_id,
+        invoice_items.invoice_item_id,
+        invoice_items.invoice_id,
+        invoice_items.invoice_number,
+        invoice_items.company_detail_id,
+        invoice_items.company_name,
 
-        product_id,
-        product_name,
-        product_mapping_status,
+        invoice_items.product_id,
+        invoice_items.product_name,
+        invoice_items.product_mapping_status,
+        quantities.invoiced_product_level,
 
-        global_customer_id,
-        global_customer_name,
-        global_customer_mapping_status,
+        invoice_items.global_customer_id,
+        invoice_items.global_customer_name,
+        invoice_items.global_customer_mapping_status,
 
-        distribution_center_id,
-        distribution_center_name,
+        invoice_items.distribution_center_id,
+        invoice_items.distribution_center_name,
 
-        item_id,
-        item_remote_id,
-        item_name,
-        customer_remote_id,
-        contact_id,
-        contact_name,
+        invoice_items.item_id,
+        invoice_items.item_remote_id,
+        invoice_items.item_name,
+        invoice_items.customer_remote_id,
+        invoice_items.contact_id,
+        invoice_items.contact_name,
 
-        amount,
-        is_deduction,
-        currency_code,
+        invoice_items.quantity,
+        quantities.quantity_uom,
+        invoice_items.unit_price,
 
-        paid_on_date,
-        is_paid,
-        invoice_created_at
+        quantities.case_product_id,
+        quantities.case_product_name,
+        quantities.case_source,
+        quantities.packs_per_case,
+        quantities.singles_per_case,
+        quantities.single_product_id,
+        quantities.single_product_name,
+
+        quantities.case_quantity,
+        quantities.pack_quantity,
+        quantities.single_quantity,
+        quantities.expected_case_price,
+        quantities.expected_amount,
+        quantities.implied_case_quantity,
+        quantities.quantity_price_check,
+
+        invoice_items.amount,
+        invoice_items.is_deduction,
+        invoice_items.currency_code,
+
+        invoice_items.paid_on_date,
+        invoice_items.is_paid,
+        invoice_items.invoice_created_at
 
     from invoice_items
-    where is_paid
+    left join quantities
+        on invoice_items.invoice_item_id = quantities.invoice_item_id
+    where invoice_items.is_paid
 
 )
 

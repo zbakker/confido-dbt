@@ -25,6 +25,7 @@ joined as (
         invoice_items.invoice_id,
         invoices.invoice_number,
         invoices.company_detail_id,
+        invoices.company_name,
 
         item_mapping.product_id,
         item_mapping.product_name,

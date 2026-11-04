@@ -24,6 +24,12 @@ distribution_centers as (
 
 ),
 
+companies as (
+
+    select * from {{ ref('stg_confido__company_details') }}
+
+),
+
 -- negative lines are treated as deductions (same assumption as is_deduction on lines)
 invoice_totals as (
 
@@ -45,6 +51,7 @@ joined as (
         invoices.invoice_id,
         invoices.invoice_number,
         invoices.company_detail_id,
+        companies.company_name,
         invoices.subsidiary_id,
 
         invoices.customer_remote_id,
@@ -74,13 +81,18 @@ joined as (
         invoices.created_at as invoice_created_at
 
     from invoices
+    left join companies
+        on invoices.company_detail_id = companies.company_detail_id
     left join invoice_totals
         on invoices.invoice_id = invoice_totals.invoice_id
     left join contact_mapping
         on invoices.company_detail_id = contact_mapping.company_detail_id
         and invoices.customer_remote_id = contact_mapping.contact_remote_id
+    -- a DC is either specific to one company or shared (null company), like global customers
     left join distribution_centers
         on contact_mapping.distribution_center_id = distribution_centers.distribution_center_id
+        and (distribution_centers.company_detail_id is null
+            or distribution_centers.company_detail_id = invoices.company_detail_id)
 
 )
 

@@ -1,0 +1,33 @@
+models:
+  - name: int_invoice_items_quantities
+    description: >
+      One row per invoice line item with its quantity converted to cases, packs
+      and singles, and the line's unit price checked against the expected case
+      price. The invoiced product sets the level of the quantity; for cases and
+      shippers (every mapped line in current data) the quantity is cases. Singles
+      and packs are converted via the case their shipping config names.
+    data_tests:
+      - dbt_utils.equal_rowcount:
+          arguments:
+            compare_model: ref('int_invoice_items_enriched')
+    columns:
+      - name: invoice_item_id
+        data_tests:
+          - unique
+          - not_null
+      - name: quantity_uom
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['case', 'pack', 'single']
+      - name: case_source
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['invoiced_product', 'shipping_config']
+      - name: quantity_price_check
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['matches_case_price', 'differs_from_case_price', 'not_a_case_price', 'no_case_price']
